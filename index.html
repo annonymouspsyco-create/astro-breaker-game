@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Astro-Breaker: The Last Stand</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent scrollbars */
+            height: 100%;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        canvas {
+            display: block; /* Removes bottom margin */
+            background-color: #0a0a1a;
+        }
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        .screen {
+            display: none;
+            position: absolute;
+            z-index: 100;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .screen h1 { font-size: 48px; color: #0ff; text-shadow: 0 0 15px #0ff; margin-bottom: 30px; }
+        .screen h2 { font-size: 48px; color: #0ff; text-shadow: 0 0 10px #0ff; }
+        .screen p { font-size: 18px; max-width: 600px; line-height: 1.6; margin-bottom: 20px; }
+        
+        .card-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+        .card {
+            background: #112;
+            border: 2px solid #0ff;
+            border-radius: 10px;
+            width: 200px;
+            padding: 20px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex; /* Use flexbox for card content */
+            flex-direction: column; /* Stack content vertically */
+            justify-content: space-between; /* Space out content */
+        }
+        .card:hover { transform: scale(1.05); box-shadow: 0 0 15px #0ff; }
+        .card h3 { margin-top: 0; font-size: 24px; }
+        .card p { font-size: 14px; color: #ccc; flex-grow: 1; } /* Allow p to grow */
+        
+        /* --- STYLES FOR SHIP SPRITES --- */
+        .card .ship-sprite {
+            width: 100%;
+            height: 100px; /* Give it a fixed height */
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card .ship-sprite svg {
+            width: 100%;
+            height: 100%;
+            stroke-width: 5; /* Thicker lines for visibility */
+            fill: none;
+        }
+        /* Colors for each ship */
+        .ship-sprite .interceptor { stroke: white; }
+        .ship-sprite .juggernaut { stroke: #7f7; }
+        .ship-sprite .phantom { stroke: #aaa; }
+        .ship-sprite .marauder { stroke: #ffa500; }
+        .ship-sprite .aegis { stroke: #0af; }
+        /* --- END OF NEW STYLES --- */
+
+        #start-mission-button {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 24px;
+            padding: 15px 30px;
+            background-color: transparent;
+            color: #0f0;
+            border: 2px solid #0f0;
+            border-radius: 5px;
+            cursor: pointer;
+            text-shadow: 0 0 10px #0f0;
+            transition: background-color 0.3s, color 0.3s;
+            margin-top: 20px;
+        }
+        #start-mission-button:hover { background-color: #0f0; color: #000; }
+
+        .ui-top {
+            position: absolute;
+            top: 10px;
+            width: 98%;
+            left: 1%;
+            display: none; /* Hidden by default */
+            justify-content: space-between;
+            align-items: center;
+            font-size: 20px;
+            pointer-events: none;
+        }
+        #healthBarContainer { width: 200px; height: 20px; border: 2px solid #fff; background-color: #1a0000; border-radius: 10px; position: relative; display: flex; overflow: hidden; }
+        #healthBar { width: 100%; height: 100%; background-color: #ff0000; border-radius: 8px; transition: width 0.2s linear, background-color 0.2s linear; position: absolute; top: 0; left: 0; }
+        .health-divider { width: 25%; height: 100%; border-right: 1px solid rgba(255, 100, 100, 0.4); box-sizing: border-box; }
+        .health-divider:last-child { border-right: none; }
+        .ui-center-message { display: none; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 36px; text-shadow: 0 0 10px #f00; }
+        .game-over { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 48px; }
+        .game-over p { font-size: 20px; margin-top: 10px; }
+
+        #mobile-controls { display: none; position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        body.mobile-active #mobile-controls { display: flex; }
+        #joystick-area { position: absolute; bottom: 30px; left: 30px; width: 150px; height: 150px; pointer-events: auto; }
+        #joystick-base { position: absolute; width: 100%; height: 100%; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 50%; }
+        #joystick-knob { position: absolute; width: 60px; height: 60px; background-color: rgba(255, 255, 255, 0.5); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        #shoot-button { position: absolute; bottom: 40px; right: 40px; width: 100px; height: 100px; border: 2px solid rgba(255, 0, 0, 0.5); background-color: rgba(255, 0, 0, 0.3); border-radius: 50%; pointer-events: auto; }
+        #shield-button { position: absolute; bottom: 150px; right: 50px; width: 80px; height: 80px; border: 2px solid rgba(0, 255, 255, 0.5); background-color: rgba(0, 255, 255, 0.3); border-radius: 50%; pointer-events: auto; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div id="ship-selection-screen" class="screen">
+        <h1>CHOOSE YOUR SHIP</h1>
+        <div class="card-container">
+            <div class="card" onclick="selectShip('interceptor')">
+                <div class="ship-sprite">
+                    <svg viewBox="0 0 100 100">
+                        <polygon class="interceptor" points="50,25 30,70 70,70" />
+                    </svg>
+                </div>
+                <h3>X-12 Interceptor</h3>
+                <p>A balanced fighter with standard speed and armor. The reliable workhorse of the fleet.</p>
+            </div>
+            
+            <div class="card" onclick="selectShip('juggernaut')">
+                <div class="ship-sprite">
+                    <svg viewBox="0 0 100 100">
+                        <polygon class="juggernaut" points="30,25 70,25 80,40 80,70 70,85 30,85 20,70 20,40" />
+                    </svg>
+                </div>
+                <h3>G-7 Juggernaut</h3>
+                <p>Slow but heavily armored. Starts with extra health and takes less collision damage.</p>
+            </div>
+
+            <div class="card" onclick="selectShip('phantom')">
+                <div class="ship-sprite">
+                     <svg viewBox="0 0 100 100">
+                        <polygon class="phantom" points="50,25 30,75 50,65 70,75" />
+                    </svg>
+                </div>
+                <h3>S-3 Phantom</h3>
+                <p>A fast and agile glass cannon. Higher speed but reduced health makes it a high-risk, high-reward choice.</p>
+            </div>
+            
+            <div class="card" onclick="selectShip('marauder')">
+                <div class="ship-sprite">
+                     <svg viewBox="0 0 100 100">
+                        <polygon class="marauder" points="50,25 25,50 35,75 65,75 75,50" />
+                    </svg>
+                </div>
+                <h3>M-5 Marauder</h3>
+                <p>Fixed forward guns. Shields ramming deals massive damage.</p>
+            </div>
+
+            <div class="card" onclick="selectShip('aegis')">
+                <div class="ship-sprite">
+                     <svg viewBox="0 0 100 100">
+                        <circle class="aegis" cx="50" cy="50" r="25" />
+                        <line class="aegis" x1="50" y1="25" x2="50" y2="75" />
+                        <line class="aegis" x1="25" y1="50" x2="75" y2="50" />
+                    </svg>
+                </div>
+                <h3>A-1 Aegis</h3>
+                <p>Starts with one pet. Enhances pet fire rate and damage.</p>
+            </div>
+        </div>
+    </div>
+    <div id="story-screen" class="screen">
+        <h1>ASTRO-BREAKER</h1>
+        <p>The year is 2742.<br><br>A silent, unknown armada, the Void Swarm, has emerged from the dark fringes of the galaxy. Colony after colony has fallen, their signals extinguished one by one.<br><br>You are the lone pilot of the prototype ship you have chosen, humanity's last hope.<br><br>Your mission: Hold the line. Break their advance. Save humanity.</p>
+        <button id="start-mission-button">[ BEGIN MISSION ]</button>
+    </div>
+    <div class="ui-top" id="game-ui">
+        <span id="scoreDisplay">SCORE: 0</span>
+        <div id="healthBarContainer"><div class="health-divider"></div><div class="health-divider"></div><div class="health-divider"></div><div class="health-divider"></div><div id="healthBar"></div></div>
+        <span id="shieldStatus">SHIELD: READY</span>
+    </div>
+    <div id="centerMessage" class="ui-center-message"></div>
+    <div id="gameOver" class="game-over">
+        GAME OVER
+        <p>Press 'R' to Restart</p>
+    </div>
+    <div id="ability-choice-screen" class="screen">
+        <h2>CHOOSE AN UPGRADE</h2>
+        <div class="card-container ability-options">
+            <div class="card" onclick="selectAbility('fireBullet')"><h3>Fire Bullet</h3><p>Your projectiles deal double damage.</p></div>
+            <div class="card" onclick="selectAbility('extraHealth')"><h3>Extra Health</h3><p>Increase maximum health by 25%.</p></div>
+            <div class="card" onclick="selectAbility('bigShield')"><h3>Big Shield</h3><p>Your shield can absorb two hits.</p></div>
+            <div class="card" onclick="selectAbility('speedo')"><h3>Speedo</h3><p>Increase ship acceleration by 25%.</p></div>
+            <div class="card" onclick="selectAbility('pett')"><h3>Pett</h3><p>Your pets fire 30% faster.</p></div>
+        </div>
+    </div>
+    <div id="mobile-controls">
+        <div id="joystick-area"><div id="joystick-base"></div><div id="joystick-knob"></div></div>
+        <div id="shoot-button"></div>
+        <div id="shield-button"></div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<script>
+    const canvas=document.getElementById('gameCanvas'),ctx=canvas.getContext('2d'),scoreEl=document.getElementById('scoreDisplay'),shieldStatusEl=document.getElementById('shieldStatus'),gameOverEl=document.getElementById('gameOver'),centerMessageEl=document.getElementById('centerMessage'),healthBarEl=document.getElementById('healthBar'),abilityChoiceScreenEl=document.getElementById('ability-choice-screen'),storyScreenEl=document.getElementById('story-screen'),startMissionBtn=document.getElementById('start-mission-button'),gameUiEl=document.getElementById('game-ui'),shipSelectionScreenEl=document.getElementById('ship-selection-screen');
+    let shipThrust, petShootCooldown, chosenShipType;
+    const BASE_SHIP_THRUST = 0.0525, BASE_PET_COOLDOWN = 1500;
+    const SHIP_TURN_SPEED=0.07,FRICTION=0.7,PLAYER_BULLET_SPEED=8,SHIELD_ACTIVATION_TIME=3000,SHIELD_COOLDOWN_TIME=5000,POINTS_PER_KILL=50,BULLET_DAMAGE=100,KILL_HEAL_AMOUNT=10;
+    let player,isGameOver,score,playerBullets=[],enemyBullets=[],enemies=[],pets=[],currentBoss=null,isBossFightActive=false,isPausedForAbilityChoice=false,isMobile=false,gameHasStarted=false;
+    let keys={up:false,left:false,right:false,space:false,s:false};
+    let nextPetScore,currentPetCost,petCostIncrease,enemySpawnDelay,difficultyTier,nextDifficultyScore,petRevolutionAngle=0,hasTriggeredBoss1=false,hasTriggeredBoss2=false,hasChosenAbility=false,nextSpawnIncreaseScore;
+    const distance=(x1,y1,x2,y2)=>Math.sqrt(Math.pow(x2-x1,2)+Math.pow(y2-y1,2));
+    function showCenterMessage(t,d=1500,c='#0f0'){centerMessageEl.textContent=t;centerMessageEl.style.color=c;centerMessageEl.style.textShadow=`0 0 10px ${c}`;centerMessageEl.style.display='block';setTimeout(()=>{if(centerMessageEl.textContent===t){centerMessageEl.style.display='none'}},d)}
+    
+    class Player{
+        constructor(shipType){
+            this.shipType = shipType;
+            this.x=canvas.width/2;this.y=canvas.height/2;
+            this.radius=15; // Base radius, used for collisions
+            this.angle=0;
+            this.vel={x:0,y:0};this.canShoot=true;this.shieldState='READY';this.shieldActivationEndTime=0;this.shieldCooldownEndTime=0;
+            this.canTakeCollisionDamage=true;this.maxShieldHealth=1;this.shieldHealth=1;
+            this.collisionDamageModifier = 1;
+            this.canTurn = true; 
+
+            switch(shipType) {
+                case 'juggernaut':
+                    this.maxHealth = 150;
+                    this.health = 150;
+                    this.collisionDamageModifier = 0.5;
+                    this.radius = 20; // Larger collision for octagonal shape
+                    break;
+                case 'phantom':
+                    this.maxHealth = 75;
+                    this.health = 75;
+                    this.radius = 13;
+                    break;
+                case 'marauder':
+                    this.maxHealth = 120;
+                    this.health = 120;
+                    this.angle = -Math.PI / 2; // Fixed angle, facing up
+                    this.canTurn = false;
+                    this.radius = 18;
+                    break;
+                case 'aegis':
+                    this.maxHealth = 100;
+                    this.health = 100;
+                    this.radius = 16; // Based on 25 radius in SVG
+                    break;
+                case 'interceptor':
+                default:
+                    this.maxHealth = 100;
+                    this.health = 100;
+                    break;
+            }
+        }
+        takeDamage(a, isCollision=false){
+            const damage = isCollision ? a * this.collisionDamageModifier : a;
+            this.health-=damage;if(this.health<0)this.health=0;this.updateHealthUI()
+        }
+        heal(a){this.health+=a;if(this.health>this.maxHealth)this.health=this.maxHealth;this.updateHealthUI()}
+        updateHealthUI(){const h=this.health/this.maxHealth;healthBarEl.style.width=`${h*100}%`;if(h>0.75)healthBarEl.style.backgroundColor='#ff0000';else if(h>0.5)healthBarEl.style.backgroundColor='#cc0000';else if(h>0.25)healthBarEl.style.backgroundColor='#990000';else healthBarEl.style.backgroundColor='#660000';if(h*100<30&&this.health>0){showCenterMessage("SYSTEM CRITICAL",500,'#f00')}else if(centerMessageEl.textContent==="SYSTEM CRITICAL"){centerMessageEl.style.display='none'}}
+        
+        // --- COMPLETELY REWRITTEN DRAW METHOD (NO DOT) ---
+        draw(){
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle); 
+            
+            ctx.lineWidth = 2;
+            
+            // Scaling factor for drawing.
+            // We'll base it on the ship's radius.
+            const r = this.radius; 
+            
+            if (this.shipType === 'interceptor') {
+                // SVG: (50,25), (30,70), (70,70) -> Center (50, 55)
+                // Rel: (0, -30), (-20, 15), (20, 15)
+                // Rotated: (30, 0), (-15, -20), (-15, 20)
+                const s = r / 20; // Scale
+                ctx.strokeStyle = 'white';
+                ctx.beginPath();
+                ctx.moveTo(s * 15, 0); // Nose (30,0)
+                ctx.lineTo(s * -7.5, s * -10); // (-15,-20)
+                ctx.lineTo(s * -7.5, s * 10); // (-15, 20)
+                ctx.closePath();
+                ctx.stroke();
+            
+            } else if (this.shipType === 'juggernaut') {
+                // SVG: (30,25 70,25 80,40 80,70 70,85 30,85 20,70 20,40) -> Center (50, 55)
+                // Rel: (-20,-30), (20,-30), (30,-15), (30,15), (20,30), (-20,30), (-30,15), (-30,-15)
+                // Rotated: (30,-20), (30,20), (15,30), (-15,30), (-30,20), (-30,-20), (-15,-30), (15,-30)
+                const s = r / 25; // Scale
+                ctx.strokeStyle = '#7f7';
+                ctx.beginPath();
+                ctx.moveTo(s * 15, s * -10); // (30, -20)
+                ctx.lineTo(s * 15, s * 10);  // (30, 20)
+                ctx.lineTo(s * 7.5, s * 15); // (15, 30)
+                ctx.lineTo(s * -7.5, s * 15); // (-15, 30)
+                ctx.lineTo(s * -15, s * 10); // (-30, 20)
+                ctx.lineTo(s * -15, s * -10);// (-30, -20)
+                ctx.lineTo(s * -7.5, s * -15);// (-15, -30)
+                ctx.lineTo(s * 7.5, s * -15); // (15, -30)
+                ctx.closePath();
+                ctx.stroke();
+            
+            } else if (this.shipType === 'phantom') {
+                // SVG: (50,25), (30,75), (50,65), (70,75) -> Center (50, 60)
+                // Rel: (0,-35), (-20,15), (0,5), (20,15)
+                // Rotated: (35,0), (-15,-20), (-5,0), (-15,20)
+                const s = r / 20; // Scale
+                ctx.strokeStyle = '#aaa';
+                ctx.beginPath();
+                ctx.moveTo(s * 17.5, 0); // (35,0)
+                ctx.lineTo(s * -7.5, s * -10); // (-15,-20)
+                ctx.lineTo(s * -2.5, 0); // (-5,0)
+                ctx.lineTo(s * -7.5, s * 10); // (-15, 20)
+                ctx.closePath();
+                ctx.stroke();
+
+            } else if (this.shipType === 'marauder') {
+                // SVG: (50,25), (25,50), (35,75), (65,75), (75,50) -> Center (50, 60)
+                // Rel: (0,-35), (-25,-10), (-15,15), (15,15), (25,-10)
+                // Rotated: (35,0), (10,-25), (-15,-15), (-15,15), (10,25)
+                const s = r / 20; // Scale
+                ctx.strokeStyle = '#ffa500';
+                ctx.beginPath();
+                ctx.moveTo(s * 17.5, 0); // (35,0)
+                ctx.lineTo(s * 5, s * -12.5); // (10, -25)
+                ctx.lineTo(s * -7.5, s * -7.5); // (-15, -15)
+                ctx.lineTo(s * -7.5, s * 7.5);  // (-15, 15)
+                ctx.lineTo(s * 5, s * 12.5);  // (10, 25)
+                ctx.closePath();
+                ctx.stroke();
+
+            } else if (this.shipType === 'aegis') {
+                // SVG: circle(50,50,r=25) -> Center (50,50)
+                // Rel: circle(0,0,r=25)
+                const s = r / 25; // Scale
+                ctx.strokeStyle = '#0af';
+                ctx.beginPath();
+                ctx.arc(0, 0, s * 25, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(s * 25, 0);
+                ctx.lineTo(s * -25, 0);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, s * 25);
+                ctx.lineTo(0, s * -25);
+                ctx.stroke();
+            }
+            
+            ctx.restore(); // Restore context
+            this.drawShield(); // Draw shield (un-rotated)
+        }
+        // --- END OF REWRITTEN DRAW METHOD ---
+
+        drawShield(){if(this.shieldState==='ACTIVE'){ctx.strokeStyle='#00ffff';ctx.lineWidth=this.shieldHealth>1?5:3;this.drawShieldArc()}else if(this.shieldState==='ACTIVATING'){const p=Math.abs(Math.sin(Date.now()/150));ctx.strokeStyle=`rgba(0,255,255,${p})`;ctx.lineWidth=2;this.drawShieldArc()}}
+        drawShieldArc(){ctx.beginPath();ctx.arc(this.x,this.y,this.radius+8,this.angle-Math.PI/2.5/2,this.angle+Math.PI/2.5/2);ctx.stroke()}
+        
+        update(){
+            if(!isMobile){
+                if(this.canTurn){ // Normal turning
+                    if(keys.left)this.angle-=SHIP_TURN_SPEED;
+                    if(keys.right)this.angle+=SHIP_TURN_SPEED
+                } else { // Marauder strafing
+                    if(keys.left) this.vel.x -= shipThrust;
+                    if(keys.right) this.vel.x += shipThrust;
+                }
+            }
+            if(keys.up){ // 'up' key (W) always provides forward thrust
+                this.vel.x+=shipThrust*Math.cos(this.angle);
+                this.vel.y+=shipThrust*Math.sin(this.angle)
+            }
+            this.vel.x*=(1-FRICTION/60);this.vel.y*=(1-FRICTION/60);this.x+=this.vel.x;this.y+=this.vel.y;this.handleScreenWrap();this.updateShield()
+        }
+        
+        updateShield(){if(keys.s&&this.shieldState==='READY'){this.shieldState='ACTIVATING';this.shieldActivationEndTime=Date.now()+SHIELD_ACTIVATION_TIME}if(this.shieldState==='ACTIVATING'&&Date.now()>=this.shieldActivationEndTime){this.shieldState='ACTIVE';this.shieldHealth=this.maxShieldHealth}if(this.shieldState==='COOLDOWN'&&Date.now()>=this.shieldCooldownEndTime)this.shieldState='READY'}
+        breakShield(){this.shieldHealth--;if(this.shieldHealth<=0){this.shieldState='COOLDOWN';this.shieldCooldownEndTime=Date.now()+SHIELD_COOLDOWN_TIME}}
+        handleScreenWrap(){if(this.x<0-this.radius)this.x=canvas.width+this.radius;if(this.x>canvas.width+this.radius)this.x=0-this.radius;if(this.y<0-this.radius)this.y=canvas.height+this.radius;if(this.y>canvas.height+this.radius)this.y=0-this.radius}
+        shoot(){if(this.canShoot&&keys.space){playerBullets.push(new PlayerBullet(this.x,this.y,this.angle));this.canShoot=false;setTimeout(()=>{this.canShoot=true},250)}}
+    }
+
+    let playerHasFireBullets=false;
+    class PlayerBullet{
+        constructor(x,y,a, isPetBullet=false){
+            this.x=x;
+            this.y=y;
+            this.radius=3;
+            this.vel={x:PLAYER_BULLET_SPEED*Math.cos(a),y:PLAYER_BULLET_SPEED*Math.sin(a)};
+            this.damage=playerHasFireBullets?2:1;
+            this.color=playerHasFireBullets?'#ffa500':'white';
+            
+            if(isPetBullet && chosenShipType === 'aegis'){ 
+                this.damage *= 1.5;
+                this.color = '#0af';
+            }
+        }
+        draw(){ctx.fillStyle=this.color;ctx.beginPath();ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);ctx.fill()}
+        update(){this.x+=this.vel.x;this.y+=this.vel.y}
+    }
+    class Pet{constructor(pX,pY){this.x=pX;this.y=pY;this.radius=8;this.lastShotTime=Date.now()}draw(){ctx.fillStyle='#0f0';ctx.beginPath();ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);ctx.fill()}update(tX,tY){this.x+=(tX-this.x)*0.05;this.y+=(tY-this.y)*0.05;if(Date.now()-this.lastShotTime>petShootCooldown&&(enemies.length>0||currentBoss)){this.shoot();this.lastShotTime=Date.now()}}
+    shoot(){let n=null,m=Infinity;let t=enemies.slice();if(currentBoss)t.push(currentBoss);t.forEach(e=>{const d=distance(this.x,this.y,e.x,e.y);if(d<m){m=d;n=e}});if(n){const a=Math.atan2(n.y-this.y,n.x-this.x);
+        playerBullets.push(new PlayerBullet(this.x,this.y,a, true))
+    }}}
+    class EnemyBullet{constructor(x,y,a,s){this.x=x;this.y=y;this.radius=4;this.vel={x:s*Math.cos(a),y:s*Math.sin(a)}}draw(){ctx.fillStyle='red';ctx.beginPath();ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);ctx.fill()}update(){this.x+=this.vel.x;this.y+=this.vel.y}}
+    
+    class Enemy{
+        constructor(forcedType=null){
+            this.radius=20;if(Math.random()<0.5){this.x=Math.random()<0.5?0-this.radius:canvas.width+this.radius;this.y=Math.random()*canvas.height}else{this.x=Math.random()*canvas.width;this.y=Math.random()<0.5?0-this.radius:canvas.height+this.radius}
+            const typeRoll=Math.random();
+            if(forcedType==='Brute'){this.type='Brute';this.color='#ff0';this.health=3;this.speed=0.4;this.bulletSpeed=4;this.bulletCount=3;this.spread=Math.PI/9}
+            else if(difficultyTier>=3&&typeRoll<0.25){this.type='Brute';this.color='#ff0';this.health=3;this.speed=0.4;this.bulletSpeed=4;this.bulletCount=3;this.spread=Math.PI/9}
+            else if(difficultyTier>=2&&typeRoll<0.6){this.type='Hunter';this.color='#9400D3';this.health=2;this.speed=0.7;this.bulletSpeed=5;this.bulletCount=2;this.spread=Math.PI/18}
+            else{this.type='Grunt';this.color='#f00';this.health=1;this.speed=0.5;this.bulletSpeed=4;this.bulletCount=1;this.spread=0}
+            this.vel={x:Math.random()*this.speed*(Math.random()<0.5?1:-1),y:Math.random()*this.speed*(Math.random()<0.5?1:-1)};this.shootCooldown=Math.random()*1000+2000;this.lastShotTime=Date.now()
+        }
+        draw(){ctx.strokeStyle=this.color;ctx.lineWidth=2;if(this.health>1){ctx.fillStyle=this.color;ctx.globalAlpha=0.3;ctx.beginPath();ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1.0}ctx.beginPath();ctx.moveTo(this.x,this.y-this.radius);ctx.lineTo(this.x+this.radius,this.y);ctx.lineTo(this.x,this.y+this.radius);ctx.lineTo(this.x-this.radius,this.y);ctx.closePath();ctx.stroke()}
+        update(){this.x+=this.vel.x;this.y+=this.vel.y;this.handleScreenWrap();if(Date.now()-this.lastShotTime>this.shootCooldown){this.shoot();this.lastShotTime=Date.now()}}
+        handleScreenWrap(){if(this.x<0-this.radius)this.x=canvas.width+this.radius;if(this.x>canvas.width+this.radius)this.x=0-this.radius;if(this.y<0-this.radius)this.y=canvas.height+this.radius;if(this.y>canvas.height+this.radius)this.y=0-this.radius}
+        shoot(){
+            const angleToPlayer=Math.atan2(player.y-this.y,player.x-this.x);
+            for(let i=0;i<this.bulletCount;i++){
+                const angle=angleToPlayer-this.spread/2+(this.bulletCount>1?i/(this.bulletCount-1)*this.spread:0);
+                enemyBullets.push(new EnemyBullet(this.x,this.y,angle,this.bulletSpeed))
+            }
+        }
+        takeDamage(d){this.health-=d;return this.health<=0}
+    }
+
+    class Boss{constructor(s,h,c,b){this.sides=s;this.maxHealth=h;this.health=h;this.color=c;this.bulletCount=b;this.radius=70;this.x=canvas.width/2;this.y=-this.radius;this.vel={x:1,y:0.05};this.shootCooldown=2000;this.lastShotTime=Date.now();this.isEntering=true}draw(){ctx.strokeStyle=this.color;ctx.lineWidth=4;ctx.beginPath();for(let i=0;i<this.sides;i++){const a=i/this.sides*Math.PI*2-Math.PI/2;ctx.lineTo(this.x+this.radius*Math.cos(a),this.y+this.radius*Math.sin(a))}ctx.closePath();ctx.stroke();this.drawHealthBar()}drawHealthBar(){const bW=200;ctx.fillStyle='#500';ctx.fillRect(this.x-bW/2,this.y-this.radius-20,bW,10);ctx.fillStyle=this.color;ctx.fillRect(this.x-bW/2,this.y-this.radius-20,bW*(this.health/this.maxHealth),10);ctx.strokeStyle='white';ctx.strokeRect(this.x-bW/2,this.y-this.radius-20,bW,10)}update(){if(this.isEntering){this.y+=this.vel.y*(canvas.height/60);if(this.y>=100)this.isEntering=false}else{this.x+=this.vel.x;if(this.x<this.radius||this.x>canvas.width-this.radius)this.vel.x*=-1}if(Date.now()-this.lastShotTime>this.shootCooldown&&!this.isEntering){this.shoot();this.lastShotTime=Date.now()}}shoot(){const aTP=Math.atan2(player.y-this.y,player.x-this.x);const s=Math.PI/4;for(let i=0;i<this.bulletCount;i++){const a=aTP-s/2+(this.bulletCount>1?i/(this.bulletCount-1)*s:0);enemyBullets.push(new EnemyBullet(this.x,this.y,a,4))}}takeDamage(d){this.health-=d;return this.health<=0}}
+    
+    function startBossFight(t){isBossFightActive=true;enemies=[];showCenterMessage("! WARNING !",2500,'#f00');setTimeout(()=>{if(t==='pentagon')currentBoss=new Boss(5,25,'#f0f',5);else if(t==='hexagon')currentBoss=new Boss(6,40,'#ffa500',6)},2500)}
+    function showAbilityChoiceScreen(){isPausedForAbilityChoice=true;abilityChoiceScreenEl.style.display='flex'}
+    function selectAbility(a){playerHasFireBullets=a==='fireBullet';if(a==='extraHealth'){player.maxHealth*=1.25;player.heal(player.maxHealth)}if(a==='bigShield')player.maxShieldHealth=2;if(a==='speedo')shipThrust*=1.25;if(a==='pett')petShootCooldown*=0.7;hasChosenAbility=true;abilityChoiceScreenEl.style.display='none';isPausedForAbilityChoice=false;gameLoop(0)}
+    function checkScoreMilestones(){if(isBossFightActive)return;if(!hasChosenAbility&&score>=500){showAbilityChoiceScreen()}if(score>=nextSpawnIncreaseScore){if(nextSpawnIncreaseScore===500){enemySpawnDelay*=0.75}else{enemySpawnDelay*=0.66}showCenterMessage("Enemy spawn rate increased!",1500,'#f55');nextSpawnIncreaseScore+=500}if(!hasTriggeredBoss1&&score>=2000){hasTriggeredBoss1=true;startBossFight('pentagon')}if(!hasTriggeredBoss2&&score>=5000){hasTriggeredBoss2=true;startBossFight('hexagon')}if(score>=nextPetScore){const sA=player.angle+Math.PI,sD=60;pets.push(new Pet(player.x+sD*Math.cos(sA),player.y+sD*Math.sin(sA)));nextPetScore+=currentPetCost;currentPetCost+=petCostIncrease;showCenterMessage("NEW PET!")}if(score>=nextDifficultyScore){difficultyTier++;if(difficultyTier===2)nextDifficultyScore=2500;else nextDifficultyScore=Infinity;showCenterMessage(`THREAT LEVEL UP!`)}}
+    
+    function handleCollisions(){
+        if(player.canTakeCollisionDamage&&!isBossFightActive){
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                if(e && distance(player.x,player.y,e.x,e.y) < player.radius+e.radius){
+                    if (player.shieldState === 'ACTIVE' && player.shipType === 'marauder') {
+                        const didKill = e.takeDamage(10);
+                        if (didKill) {
+                            enemies.splice(i, 1);
+                            score += POINTS_PER_KILL;
+                            player.heal(KILL_HEAL_AMOUNT);
+                            checkScoreMilestones();
+                            if(!isBossFightActive) setTimeout(()=>enemies.push(new Enemy()), enemySpawnDelay);
+                        }
+                        player.breakShield();
+                        player.canTakeCollisionDamage = false;
+                        setTimeout(() => { player.canTakeCollisionDamage = true }, 500);
+                    } else {
+                        player.takeDamage(50, true);
+                        player.canTakeCollisionDamage = false;
+                        setTimeout(() => { player.canTakeCollisionDamage = true }, 1000);
+                    }
+                }
+            }
+        }
+
+        enemyBullets.forEach(b=>{const d=distance(player.x,player.y,b.x,b.y);if(player.shieldState==='ACTIVE'&&d<player.radius+12){const a=Math.atan2(b.y-player.y,b.x-player.x);let df=Math.abs(player.angle-a);if(df>Math.PI)df=2*Math.PI-df;if(df<Math.PI/2.5){b.x=-100;player.breakShield();return}}if(d<player.radius){b.x=-100;player.takeDamage(100)}});
+        
+        if(isBossFightActive&&currentBoss){
+            if(player.canTakeCollisionDamage && distance(player.x,player.y,currentBoss.x,currentBoss.y) < player.radius+currentBoss.radius){
+                if (player.shieldState === 'ACTIVE' && player.shipType === 'marauder') {
+                    currentBoss.takeDamage(5);
+                    player.breakShield();
+                    player.canTakeCollisionDamage = false;
+                    setTimeout(()=>{player.canTakeCollisionDamage=true}, 1000);
+                } else {
+                    player.takeDamage(50,true);
+                    player.canTakeCollisionDamage=false;
+                    setTimeout(()=>{player.canTakeCollisionDamage=true},1000);
+                }
+            }
+        }
+        
+        for(let i=playerBullets.length-1;i>=0;i--){const bullet=playerBullets[i];if(isBossFightActive&&currentBoss&&distance(bullet.x,bullet.y,currentBoss.x,currentBoss.y)<currentBoss.radius){playerBullets.splice(i,1);if(currentBoss.takeDamage(bullet.damage)){score+=1000;showCenterMessage("BOSS DEFEATED",3000,'#0ff');currentBoss=null;isBossFightActive=false;for(let j=0;j<5;j++){enemies.push(new Enemy('Brute'))}}break}else{for(let j=enemies.length-1;j>=0;j--){if(enemies[j] && distance(bullet.x,bullet.y,enemies[j].x,enemies[j].y)<enemies[j].radius){playerBullets.splice(i,1);if(enemies[j].takeDamage(bullet.damage)){enemies.splice(j,1);score+=POINTS_PER_KILL;player.heal(KILL_HEAL_AMOUNT);checkScoreMilestones();if(!isBossFightActive)setTimeout(()=>enemies.push(new Enemy()),enemySpawnDelay)}break}}}}}
+    
+    function updateUI(){scoreEl.textContent=`SCORE: ${score}`;shieldStatusEl.textContent=`SHIELD: ${player.shieldState}`;if(player.shieldState==='ACTIVATING')shieldStatusEl.textContent=`ACTIVATING...`;else if(player.shieldState==='COOLDOWN')shieldStatusEl.textContent=`RECHARGING...`}
+    function gameOver(){isGameOver=true;gameUiEl.style.display='none';gameOverEl.style.display='block'}
+    
+    function gameLoop(timestamp){
+        if(!gameHasStarted || isGameOver || isPausedForAbilityChoice) return;
+        if(player.health<=0){gameOver();return}
+        
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        player.update();player.shoot();player.draw();
+        petRevolutionAngle+=0.01;
+        const oR=60;pets.forEach((p,i)=>{const a=petRevolutionAngle+i*(Math.PI*2/pets.length);const tX=player.x+oR*Math.cos(a);const tY=player.y+oR*Math.sin(a);p.update(tX,tY);p.draw()});
+        if(isBossFightActive&&currentBoss){currentBoss.update();currentBoss.draw()}else{enemies.forEach(e=>{e.update();e.draw()})};
+        [...playerBullets,...enemyBullets].forEach(b=>{b.update();b.draw()});
+        playerBullets=playerBullets.filter(b=>b.x>0&&b.x<canvas.width&&b.y>0&&b.y<canvas.height);
+        enemyBullets=enemyBullets.filter(b=>b.x>0&&b.x<canvas.width&&b.y>0&&b.y<canvas.height);
+        handleCollisions();updateUI();
+        requestAnimationFrame(gameLoop);
+    }
+    
+    function initMobileControls() {
+        const joystickArea = document.getElementById('joystick-area');
+        const joystickKnob = document.getElementById('joystick-knob');
+        const shootButton = document.getElementById('shoot-button');
+        const shieldButton = document.getElementById('shield-button');
+        const baseRect = joystickArea.getBoundingClientRect();
+        const knobSize = joystickKnob.offsetWidth;
+        const maxMove = baseRect.width / 2 - knobSize / 2;
+
+        joystickArea.addEventListener('touchstart', handleTouch, { passive: false });
+        joystickArea.addEventListener('touchmove', handleTouch, { passive: false });
+        joystickArea.addEventListener('touchend', (e) => {
+            keys.up = false;
+            joystickKnob.style.transform = `translate(-50%, -50%)`;
+        });
+        
+        function handleTouch(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - (baseRect.left + baseRect.width / 2);
+            const deltaY = touch.clientY - (baseRect.top + baseRect.height / 2);
+            
+            const angle = Math.atan2(deltaY, deltaX);
+            const distance = Math.min(maxMove, Math.sqrt(deltaX * deltaX + deltaY * deltaY));
+            
+            const knobX = distance * Math.cos(angle);
+            const knobY = distance * Math.sin(angle);
+            
+            joystickKnob.style.transform = `translate(calc(-50% + ${knobX}px), calc(-50% + ${knobY}px))`;
+            
+            if (player && player.canTurn) {
+                player.angle = angle;
+                keys.up = (distance > 20);
+            } else if (player) { // Marauder
+                if (distance > 20) {
+                    player.vel.x += (deltaX / maxMove) * shipThrust * 1.5;
+                    player.vel.y += (deltaY / maxMove) * shipThrust * 1.5;
+                }
+                keys.up = false;
+            }
+        }
+
+        shootButton.addEventListener('touchstart', (e) => { e.preventDefault(); keys.space = true; }, { passive: false });
+        shootButton.addEventListener('touchend', (e) => { e.preventDefault(); keys.space = false; });
+        shieldButton.addEventListener('touchstart', (e) => { e.preventDefault(); keys.s = true; }, { passive: false });
+        shieldButton.addEventListener('touchend', (e) => { e.preventDefault(); keys.s = false; });
+    }
+
+    function selectShip(shipType) {
+        chosenShipType = shipType;
+        shipSelectionScreenEl.style.display = 'none';
+
+        if (localStorage.getItem('hasSeenIntro')) {
+            startGame();
+        } else {
+            storyScreenEl.style.display = 'flex';
+        }
+    }
+
+    function startGame() {
+        gameHasStarted = true;
+        storyScreenEl.style.display = 'none';
+        gameUiEl.style.display = 'flex';
+        
+        isGameOver=false;gameOverEl.style.display='none';score=0;
+        nextPetScore=250;currentPetCost=250;petCostIncrease=25;
+        enemySpawnDelay=1200;difficultyTier=1;nextDifficultyScore=1000;nextSpawnIncreaseScore=500;
+        hasTriggeredBoss1=false;hasTriggeredBoss2=false;hasChosenAbility=false;currentBoss=null;isBossFightActive=false;
+
+        petShootCooldown=BASE_PET_COOLDOWN;playerHasFireBullets=false;
+        
+        shipThrust=BASE_SHIP_THRUST;
+        if(chosenShipType === 'juggernaut') shipThrust *= 0.8;
+        if(chosenShipType === 'phantom') shipThrust *= 1.2;
+
+        player=new Player(chosenShipType);player.updateHealthUI();
+        playerBullets=[];enemyBullets=[];enemies=[];pets=[];
+
+        if (chosenShipType === 'aegis') {
+            pets.push(new Pet(player.x, player.y - 60));
+            petShootCooldown *= 0.75;
+        }
+        
+        for(let i=0;i<4;i++)enemies.push(new Enemy());
+        
+        if (isMobile) {
+            document.body.classList.add('mobile-active');
+            initMobileControls();
+        }
+        requestAnimationFrame(gameLoop);
+    }
+
+    function init(){
+        canvas.width=window.innerWidth;canvas.height=window.innerHeight;
+        isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 0);
+        
+        shipSelectionScreenEl.style.display = 'flex';
+        startMissionBtn.addEventListener('click', () => {
+            localStorage.setItem('hasSeenIntro', 'true');
+            startGame();
+        });
+    }
+
+    window.addEventListener('resize',init);
+    window.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(k==='r'&&isGameOver){gameHasStarted=false;shipSelectionScreenEl.style.display='flex';gameUiEl.style.display='none'}else if(gameHasStarted){if(k==='arrowup'||k==='w')keys.up=true;if(k==='arrowleft'||k==='a')keys.left=true;if(k==='arrowright'||k==='d')keys.right=true;if(k===' ')keys.space=true;if(k==='s')keys.s=true}});
+    window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(gameHasStarted){if(k==='arrowup'||k==='w')keys.up=false;if(k==='arrowleft'||k==='a')keys.left=false;if(k==='arrowright'||k==='d')keys.right=false;if(k===' ')keys.space=false;if(k==='s')keys.s=false}});
+    init();
+</script>
+</body>
+</html>
